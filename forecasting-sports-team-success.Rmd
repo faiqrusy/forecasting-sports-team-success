@@ -1,7 +1,6 @@
 ---
 title: 'Project Report: Forecasting UEFA Champions League Team Success using Multiple Linear Regression'
-author: Kanwarpal Singh (30232373), Faiq Mohd Zulkarnain (30207865), Osama Bilgrami
-  (30213085), Arteen Rafiei (30043409)
+author: Faiq Mohd Zulkarnain
 subtitle: 'DATA 603: Statistical Modelling With Data'
 output:
   html_document:
