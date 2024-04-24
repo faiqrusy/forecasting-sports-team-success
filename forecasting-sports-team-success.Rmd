@@ -1,0 +1,847 @@
+---
+title: 'Project Report: Forecasting UEFA Champions League Team Success using Multiple Linear Regression'
+author: Kanwarpal Singh (30232373), Faiq Mohd Zulkarnain (30207865), Osama Bilgrami
+  (30213085), Arteen Rafiei (30043409)
+subtitle: 'DATA 603: Statistical Modelling With Data'
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    keep_tex: yes
+    latex_engine: xelatex
+  word_document:
+    toc: yes
+    toc_depth: '3'
+header-includes:
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+- \fancyhf{}
+- \fancyfoot[CO,CE]{\thepage}
+- \renewcommand{\headrulewidth}{0pt}
+---
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,warning=FALSE}
+library(ggplot2)
+library(mosaic)
+library(olsrr)
+library(leaps)
+library(GGally)
+library(agricolae)
+library(car)
+library(zoo)
+library(knitr)
+library(lmtest)
+library(mctest)
+library("dplyr")
+
+set.seed(1997)
+options(scipen=999)
+```
+
+<br><br>
+
+### **Introduction**
+
+This project embarks on a journey to explore the world of soccer performance through the lens of statistical modelling. Utilizing the capabilities of R and our knowledge from DATA 603, we aim to construct and analyze a Multiple Linear Regression (MLR) model to predict win percentage and possession percentage for teams playing in the UEFA Champions League during the 2021/22 season.
+
+The UEFA Champions League (UCL) stands as UEFA's premier club competition, showcasing elite clubs from across Europe vying for the prestigious title of champions. Originating as the European Cup in the 1955/56 season with 16 participating teams, the tournament underwent a transformation in 1992/93, evolving into the Champions League. The 2021/22 season witnessed the participation of 78 clubs, highlighting its significant growth over the years. A pinnacle in club competitions, the UCL garners immense relevance in the football world. The 2021-2022 season featured thrilling matches, remarkable goals, and fierce competition, captivating millions of global football fans. According to UEFA's annual report, the 2020-2021 season reached a record-breaking global viewership of over 3.5 billion cumulative viewers, emphasizing the tournament's global significance. The information is sourced from the UEFA Champions League Competition Format & History page on the Premier League's official website (Premier League, 2023).
+
+Our analysis extends beyond predicting win percentage to include possession percentage---a recognized determinant of team success. Teams with higher possession percentages often win, contributing depth to our interpretation. This approach ensures a holistic exploration of soccer dynamics, enhancing the comprehensiveness of our findings.
+
+The significance of this study offers insights for soccer coaches, players, analysts, and enthusiasts, like us, aiding them in understanding the nuances of team success. By dissecting the key factors influencing a team's win percentage and their relative importance, this research stands to inform and possibly even transform strategies, enhancing overall team performance. Our collective passion for soccer in this project makes it an academically solid and personally fulfilling project.
+
+Our goals are threefold: to develop precise predictive models that are tailored to a team's success in soccer, to analyze the significance of various performance indicators, and to provide insights for predicting match outcomes and improving team strategies.
+
+<br>
+
+### **Methodology**
+
+To construct robust MLR models, we embraced a collaborative approach that harnessed the different strengths of our team. Each team member assumed a pivotal role in the meticulous development of the model, contributing to a comprehensive and thorough analysis. To uphold the integrity of our models, the critical task of validating statistical assumptions---such as linearity, homoscedasticity, and normality of residuals---was judiciously delegated to pairs of team members for each model. This deliberate division of responsibilities facilitated a focused evaluation of the foundational aspects of each model. Subsequent to the completion of these assumption checks, the entire team convened for a collective assessment, appraising the congruence of each model with our research objectives.
+
+The ultimate phase of our project, encompassing the compilation of the report, was similarly approached as a collaborative endeavor. Each team member contributed their distinctive insights to the writing and editing process. This concerted effort was instrumental in ensuring that our findings were not only clearly articulated but also deeply rooted in our exhaustive data analysis. This unified approach played a pivotal role in integrating the diverse perspectives within our team, culminating in a well-rounded and insightful project report that authentically reflected our team's collective dedication.
+
+<br>
+
+### **Dataset**
+
+The dataset used for this project was sourced from Kaggle, put together thanks to a Kaggle user by web scraping via the Python Scrapy tool. The Python Scrapy tool extracted group stage information in the 2021/2022 season found on the UEFA Champions League website (<https://www.uefa.com/uefachampionsleague/>). This will serve as our analytical foundation, offering many performance metrics to unravel the secrets behind a soccer team's success. The dataset consists of 32 rows, each corresponding to the teams that participated in the current season. It encompasses 66 columns, offering a diverse range of performance metrics, including but not limited to goals, saves, assists, possession, passing accuracy, and fouls. This extensive dataset serves as the foundation for our in-depth analysis, providing a rich and comprehensive source of information for our study.
+
+```{r, echo=FALSE}
+ucl <- read.csv("ucl_2021_22_data.csv")
+head(ucl,5)
+```
+
+<br>
+
+### **Data Cleaning & Exploration**
+
+<br>
+
+#### Data Cleaning
+
+In the initial phase of our data cleaning and wrangling, we prioritized standardization for enhanced clarity and analytical ease. This involved renaming columns to more descriptive titles such as team_name, team_code, wins, draws, losses, points, qualified, and various performance metrics like goals, goals_conceded, possession_percent, passing_accuracy_percent, among others. Subsequently, we conducted a comprehensive review of the data structure using the 'str()' function in R. This examination aimed to ensure that each variable was correctly classified, aligning with its designated data type.
+
+Addressing data integrity concerns, we proceeded to perform type-casting and ratio fixing. Specifically, columns representing ratios as character strings, such as passes_completed, short_passes_completed, medium_passes_completed, long_passes_completed, and clearances_completed, underwent transformation. This process involved splitting character ratios and converting them into numerical representations to facilitate accurate analysis.
+
+To maintain the reliability of our dataset, we meticulously handled missing data, ensuring the absence of entirely missing columns. Any such instances were removed to uphold the integrity of our data. As a pivotal step towards constructing our predictive model, we created the 'win_pct' column for win percentage as the dependent variable. Calculated from the wins, draws, and losses of each team, this metric serves as the foundational element for our initial predictive modeling efforts.
+
+In order to facilitate predictive analysis, we adopted a strategic approach to data partitioning, reserving 30 observations for model creation while earmarking the remaining 2 observations for future predictions. Notably, we temporarily excluded data related to soccer teams Villareal CF and Manchester City, preserving them for later testing to gauge the accuracy of our models.
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+colnames(ucl) <- c(
+    "team_name", "team_code", "wins", "draws", "losses", "points", 
+    "qualified", "group", "country_code", "goals", "goals_conceded", 
+    "possession_percent", "passing_accuracy_percent", "balls_recovered", 
+    "tackles_won", "clean_sheets", "saves", "distance_covered_km", 
+    "yellow_cards", "red_cards", "right_foot", "left_foot", "head", 
+    "other", "assists", "attacks", "clear_chances", "penalties_scored", 
+    "corners_taken", "offsides", "runs_into_attacking_third", 
+    "runs_into_key_play_area", "passes_completed", "short_passes_completed", 
+    "medium_passes_completed", "long_passes_completed", "crossing_accuracy_percent", 
+    "crosses_completed", "crosses_attempted", "free_kicks_taken", 
+    "times_in_possession", "passes_into_attacking_third", "passes_into_key_play_area", 
+    "passes_into_penalty_area", "blocks", "clearances_completed", 
+    "attempts_conceded_off_target", "attempts_conceded", "saves_from_penalties", 
+    "high_claims", "low_claims", "punches_made", "fouls_committed", 
+    "fouls_committed_in_defensive_third", "fouls_committed_in_own_half", 
+    "fouls_suffered"
+)
+head(ucl,5)
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+str(ucl)
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+# type-casting and fixing ratios
+columns_to_convert <- c(
+  "passes_completed",
+  "short_passes_completed",
+  "medium_passes_completed",
+  "long_passes_completed",
+  "clearances_completed"
+)
+
+# Convert character ratios to numeric ratios
+for (col in columns_to_convert) {
+  ucl[[col]] <- sapply(ucl[[col]], function(x) {
+    if (grepl("/", x)) {
+      parts <- strsplit(x, "/")[[1]]
+      as.numeric(parts[1]) / as.numeric(parts[2])
+    } else {
+      as.numeric(x)
+    }
+  })
+
+  # Convert the column to numeric
+  ucl[[col]] <- as.numeric(ucl[[col]])
+}
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+head(ucl,5)
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+str(ucl)
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+ucl <- ucl[, !is.na(colnames(ucl))]
+head(ucl,35)
+```
+
+```{r, echo=FALSE, error=FALSE, message=FALSE,results=FALSE}
+# making the win percentage column (our dependent variable)
+ucl$win_pct <- ucl$wins/(ucl$wins + ucl$draws + ucl$losses)*100
+head(ucl,5)
+```
+
+```{r, echo=FALSE}
+### THIS CODE CHUNK IS SOMETIMES PROBLEMATIC
+### If you run into an issue, restart R, run all chunks above this, run this chunk separately, then Run All chunks below this!!!!!
+
+
+# removing rows to use for prediction later
+
+rows_to_remove <- which(ucl$team_name %in% c("Villarreal CF", "Manchester City FC"))
+ucl2 <- ucl[-rows_to_remove, ]
+
+# getting rid of more columns 
+
+df3 <- ucl2 %>%
+  dplyr::select(-wins, -draws, -losses, -team_name, -team_code, -country_code, -group)
+```
+
+```{r, echo=FALSE}
+str(df3)
+```
+
+```{r, echo=FALSE}
+head(df3,5)
+```
+
+Having successfully cleaned our dataset, we embarked on a thorough exploration to validate its suitability for constructing a model.
+
+<br>
+
+#### Data Exploration and Analysis
+
+```{r, echo=FALSE}
+summary(df3)
+```
+
+```{r}
+favstats(df3$win_pct, data=df3)
+```
+
+The data in the 'win_pct' column ranges from a minimum win percentage of 0% to a maximum of 100%. The median of 33.33% suggests that half of the teams achieved this or higher, while the mean win percentage across all teams is 39.44%. This concise summary provides a snapshot of the distribution and central tendencies of team performance in the dataset.
+
+<br>
+
+```{r, echo=FALSE}
+ggplot(df3, aes(y = win_pct)) +
+  geom_boxplot(fill = "skyblue", color = "darkblue") +
+  labs(title = "Boxplot of Win Percentage", y = "Win Percentage")
+```
+
+<br>
+
+A research investigation by Farias et al. (2021) aimed to assess the connection between ball possession and match outcomes in the UEFA Champions League. The study utilized official statistics from five seasons, employing both descriptive methods and the Chi-Square test for statistical analysis (p\<0.05). The findings demonstrated that teams with higher ball possession secured victories in 49.2% of all matches, with varying percentages during group and knockout phases. This analysis, detailed in the study published in Motricidade (Farias et al., 2021, <https://doi.org/10.6063/motricidade.18382>), sheds light on the influential role of ball possession in determining match results.
+
+<br>
+
+```{r, echo=FALSE, message=FALSE}
+ggplot(df3, aes(x=possession_percent, y=win_pct, fill='red')) +
+  geom_point(size=2, shape=23)+geom_smooth(method='lm',color='blue')
+```
+
+The scatter plot showcasing win percentage against possession percentage indicates a clear positive linear relationship. This alignment underscores the significance of possession in predicting team success, as teams with higher possession percentages tend to secure more wins. The concise visual representation reinforces the notion that maintaining possession is a key factor in achieving favorable outcomes in soccer matches.
+
+<br>
+
+### **Model Selection and Assumptions**
+
+<br>
+
+#### Win Percentage Model
+
+Initiating the modeling process, our initial step involved constructing our first predictive model. This model aims to forecast a team's win percentage by incorporating all relevant predictors available within our dataset.
+
+```{r}
+# making a model for win percentage using all predictors 
+reg12 <- lm(win_pct~.,df3)
+summary(reg12)
+```
+
+Attempting to use the full model resulted in obtaining all NaN values due to the abundance of variables. In response, we systematically assessed the individual significance of single variables, selecting 8 key variables as a strategic starting point for predicting a team's win percentage. This tailored approach allowed us to navigate and address the challenges posed by the extensive number of variables in our dataset.
+
+<br>
+
+```{r}
+reg13 <- lm(win_pct~goals+goals_conceded+assists+free_kicks_taken+possession_percent+passing_accuracy_percent+attacks+attempts_conceded,df3)
+summary(reg13)
+```
+
+As a starting point, a regression model was built to predict a soccer teams' win percentage (win_pct) based on key performance indicators. Significant positive influences were observed for goals scored, while goals conceded and assists had negative impacts. The overall model is highly significant (F-statistic: 20.31, p-value: 0.00000003038), explaining a substantial portion of the variance in win percentage. The model demonstrates a good fit, supported by a small residual standard error (12.12) and an adjusted R-squared of 0.8419.
+
+<br>
+
+**Stepwise Model Selection**
+
+```{r}
+stepmod=ols_step_both_p(reg13,pent = 0.05, prem = 0.1, details=FALSE)
+summary(stepmod$model)
+```
+
+**Forward Model Selection**
+
+```{r}
+forwardmod=ols_step_forward_p(reg13,pent = 0.05)
+summary(forwardmod$model)
+```
+
+**Backward Selection**
+
+```{r}
+backwardmod=ols_step_backward_p(reg13,prem=0.05)
+summary(backwardmod$model)
+```
+
+Utilizing stepwise, forward, and backward selection methodologies, we systematically identified an optimal model. Among these approaches, all models returned the same adjusted R-squared of 0.8103 and RSE of 13.27. The resulting model featured 2 significant predictors which were goals and goals conceded.
+
+<br>
+
+```{r, echo=FALSE}
+best.subset<-regsubsets(win_pct~goals+goals_conceded+assists+free_kicks_taken+possession_percent+passing_accuracy_percent+attacks+attempts_conceded, data=df3, nv=8)
+summary(best.subset)
+
+subset_UCL=summary(best.subset)
+
+rsquare<-c(subset_UCL$rsq)
+cp<-c(subset_UCL$cp)
+AdjustedR<-c(subset_UCL$adjr2)
+RMSE<-c(subset_UCL$rss)
+BIC<-c(subset_UCL$bic)
+
+
+subset_UCL1=ols_step_best_subset(reg13, details=TRUE)
+AIC<-c(subset_UCL1$aic)
+
+cbind(rsquare,cp,AdjustedR,RMSE,BIC,AIC)
+```
+
+```{r}
+par(mfrow=c(2,3)) # split the plotting panel into a 2 x 2 grid
+plot(subset_UCL$cp,type = "o",pch=8, xlab="Number of Variables",ylab= "Cp")
+plot(subset_UCL$rss,type = "o",pch=8, xlab="Number of Variables",ylab= "RMSE")
+plot(subset_UCL$bic,type = "o",pch=8, xlab="Number of Variables",ylab= "BIC")
+plot(subset_UCL1$aic,type = "o",pch=8, xlab="Number of Variables",ylab= "AIC")
+plot(subset_UCL$rsq,type = "o",pch=8, xlab="Number of Variables",ylab= "Rˆ2")
+plot(subset_UCL$adjr2,type = "o",pch=8, xlab="Number of Variables",ylab= "Adjusted Rˆ2")
+```
+
+In accordance with the All Subsets method, our analysis reveals that the model featuring four variables exhibits the lowest values for criteria such as CP, BIC, AIC, and other pertinent metrics, with an adjusted R-Squared of 0.847, positioning it among the optimal configurations. Consequently, our ultimate independent model will comprise these identified four variables (goals, goals_conceded, assists, and free_kicks_taken), reflecting their favorable performance across multiple evaluation criteria.
+
+<br>
+
+```{r}
+independent <- lm(win_pct~goals+goals_conceded+assists+free_kicks_taken,df3)
+summary(independent)
+```
+
+**Experimentation with Interaction Terms**
+
+```{r}
+interaction1 <- lm(win_pct~(goals+goals_conceded+assists+free_kicks_taken)^2,df3)
+summary(interaction1)
+```
+
+The interaction model analysis revealed that none of the interaction terms were statistically significant, as all variables had p-values greater than 0.05. Consequently, these findings suggest that the interactions between the examined variables did not contribute significantly to the model's predictive power.
+
+<br>
+
+**Experimentation with Higher Order terms**
+
+```{r}
+UCLdata <-data.frame(df3$win_pct,df3$goals,df3$goals_conceded,df3$assists,df3$free_kicks_taken)
+
+ggpairs(UCLdata,lower = list(continuous = "smooth_loess", combo =
+ "facethist", discrete = "facetbar", na = "na"))
+pairs(~win_pct+goals+goals_conceded+assists+free_kicks_taken,data=df3,panel = panel.smooth)
+```
+
+```{r}
+vif(lm(win_pct~goals+goals_conceded+assists+free_kicks_taken, data = df3))
+```
+
+```{r}
+second_order <- lm(win_pct~goals+goals_conceded+assists+free_kicks_taken+I(free_kicks_taken^2),df3)
+summary(second_order)
+```
+
+```{r}
+third_order <- lm(win_pct~goals+goals_conceded+assists+free_kicks_taken+I(free_kicks_taken^2)+I(free_kicks_taken^3),df3)
+summary(third_order)
+```
+
+The third-order model demonstrates an improvement in the Adjusted R-squared value and a reduction in the Residual Standard Error (RSE). Given that this model yields a better fit compared to previous ones, it is recommended for predictive purposes.
+
+<br>
+
+Therefore, the final model is as follows:
+
+$\widehat{\text{win_pct}}_i = -503.427 + 6.73\:{goals} - 2.695\:\text{goals_conceded} - 4.42\:{assists} + 19.98\:\text{free_kicks_taken} - 0.238\:\text{free_kicks_taken}^2 + 0.0009\:\text{free_kicks_taken}^3$
+
+<br>
+
+**Checking Model Assumptions**
+
+<br>
+
+**Multicollinearity**
+
+```{r}
+UCLdata <-data.frame(df3$win_pct,df3$goals,df3$goals_conceded,df3$assists,df3$free_kicks_taken)
+
+ggpairs(UCLdata,lower = list(continuous = "smooth_loess", combo =
+ "facethist", discrete = "facetbar", na = "na"))
+pairs(~win_pct+goals+goals_conceded+assists+free_kicks_taken,data=df3,panel = panel.smooth)
+```
+
+```{r}
+vif(lm(win_pct~goals+goals_conceded+assists+free_kicks_taken, data = df3))
+```
+
+Upon examination of pairwise scatterplots and VIF, we substantiate the presence of multicollinearity, particularly between goals and assists, revealing a correlation of 0.951. Furthermore, the VIF values, both around 12 (\>2), indicate a redundancy in input for our prediction model. To mitigate the risk of overfitting due to duplicate inputs, a prudent course of action is to eliminate one of these highly correlated variables. Consequently, we opt to remove one of the predictors from our model for enhanced model robustness.
+
+<br>
+
+**Updated Model**
+
+```{r}
+updated_model <- lm(win_pct~goals+goals_conceded+free_kicks_taken+I(free_kicks_taken^2)+I(free_kicks_taken^3),df3)
+summary(updated_model)
+```
+
+```{r}
+vif(lm(win_pct~goals+goals_conceded+free_kicks_taken, data = df3))
+```
+
+Upon reassessing the multicollinearity assumption for our revised model, we confirm its compliance with the multicollinearity criterion. The adjustments made have successfully addressed concerns related to multicollinearity, ensuring the model's robustness and reliability.
+
+<br>
+
+**Checking for Heteroscedasticity or Equal Variance**
+
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:& \text{heteroscedasticity is not present (homoscedasticity)}\\
+{\rm H}_{A} &:& \text{heteroscedasticity is present}
+\end{eqnarray}
+$$
+
+```{r, echo=FALSE}
+plot(updated_model, which=1)
+plot(updated_model, which=3)
+```
+
+```{r}
+bptest(updated_model)
+```
+
+Analyzing the residual plots, we noted a random scatter pattern, indicative of the absence of heteroscedasticity. This observation was further substantiated by the Breusch-Pagan Test, yielding a p-value of 0.74. Consequently, we fail to reject the null hypothesis associated with the Equal Variance Assumption, affirming the model's adherence to this critical assumption.
+
+<br>
+
+**Normality**
+
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:& \text{the sample data are significantly normally distributed}\\
+{\rm H}_{A} &:& \text{the sample data are not significantly normally distributed}
+\end{eqnarray}
+$$
+
+```{r, echo=FALSE}
+
+ggplot(df3, aes(sample=updated_model$residuals)) + stat_qq() + stat_qq_line() + labs(title="Normal Q-Q plot")
+```
+
+```{r}
+shapiro.test(residuals(updated_model))
+```
+
+Upon inspection of the Q-Q plot and Shapiro test, we affirm the validity of the Normality assumption. The Shapiro test yielded a p-value of 0.51, surpassing the significance level of 0.05. Consequently, we fail to reject the null hypothesis, providing assurance that the residuals adhere to a normal distribution.
+
+<br>
+
+**Linearity**
+
+```{r, echo=FALSE}
+ggplot(updated_model, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0)
+```
+
+The placement of residuals exhibits a random scatter pattern around the 0-value axis, indicating the absence of any discernible pattern or trend. This observation aligns with the assumption of homoscedasticity, suggesting that the variance of the residuals remains consistent across different levels of the predicted values.
+
+<br>
+
+**Outliers**
+
+```{r, echo=FALSE}
+plot(updated_model,which=5)
+
+plot(updated_model,pch=18,col="red",which=c(4))
+```
+
+<br>
+
+We employed Cook's distance and Residual vs Leverage plot to identify outliers; however, no clear outliers were discerned through these methods. Subsequently, we will conduct further analysis to scrutinize outliers, specifically examining leverage values exceeding 3 times the ratio of predictors to observations (3pn).
+
+<br>
+
+```{r}
+lev=hatvalues(updated_model)
+p = length(coef(updated_model))
+n = nrow(df3)
+outlier3p = lev[lev>(3*p/n)]
+print(outlier3p)
+```
+
+```{r, echo=FALSE}
+plot(rownames(df3),lev, main = "Leverage Plot", xlab="observation",
+    ylab = "Leverage Value")
+abline(h = 3 *p/n, lty = 1)
+```
+
+Using this approach, we identified a solitary influential leverage point, marked as 14. To address this, we proceeded to create a new dataset by excluding these outliers for further analysis and model refinement.
+
+<br>
+
+```{r, echo=FALSE}
+df3_new = df3[-14, ]
+updated_model1 <- lm(win_pct~goals+goals_conceded+free_kicks_taken+I(free_kicks_taken^2)+I(free_kicks_taken^3),df3_new)
+summary(updated_model1)
+```
+
+<br>
+
+Upon thorough analysis, we discovered that point 14, despite being a leverage point, exerts minimal influence on our model outcomes, with a Cook's distance of less than 0.5. Consequently, it is deemed unnecessary to exclude this point from our dataset.
+
+```{r}
+summary(updated_model)
+```
+
+After confirming the fulfillment of all assumptions, we conclude and finalize our model with the following specifications:
+
+$\small\widehat{\text{win_pct}}_i = -473.44 + 3.205\:{goals} - 3.14\:\text{goals_conceded} + 19.400\:\text{free_kicks_taken} - 0.234\:\text{free_kicks_taken}^2 + 0.0009\:\text{free_kicks_taken}^3$
+
+<br> <br>
+
+#### Possession Percentage Model
+
+<br>
+
+A linear regression model was constructed to predict possession percentage based on a selected set of predictors. The reduced model includes variables such as balls_recovered, tackles_won, free_kicks_taken, passing_accuracy_percent, attacks, runs_into_attacking_third, fouls_committed, times_in_possession, and distance_covered_km. The subsequent output provides detailed insights into the coefficients and statistical significance of each predictor within the model. This analysis aims to discern the relationships between the chosen variables and possession percentage, offering valuable information for understanding the determinants of possession in soccer matches.
+
+```{r}
+reduced_model <- lm(possession_percent~balls_recovered+tackles_won+free_kicks_taken+passing_accuracy_percent+attacks+runs_into_attacking_third+fouls_committed+times_in_possession+distance_covered_km,df3)
+summary(reduced_model)
+```
+
+The first order model, comprising nine independent variables, highlights significant predictors such as passing accuracy percentage (Estimate = 1.364836, p \< 0.001), fouls committed (Estimate = 0.103958, p = 0.002629), and times in possession (Estimate = 0.034569, p = 0.000356). The model exhibits a high Adjusted R-squared value (0.9302), indicating its robustness in explaining possession percentage variability while considering the number of predictors. Additionally, the Residual Standard Error (RSE) is 1.73, reflecting the model's precision in predicting possession percentage.
+
+<br>
+
+**Stepwise Model Selection**
+
+```{r}
+stepmod=ols_step_both_p(reduced_model,pent = 0.05, prem = 0.1, details=FALSE)
+summary(stepmod$model)
+```
+
+**Forward Model Selection**
+
+```{r}
+forwardmod=ols_step_forward_p(reduced_model,pent = 0.05)
+summary(forwardmod$model)
+```
+
+**Backward Selection**
+
+```{r}
+backwardmod=ols_step_backward_p(reduced_model,prem=0.05)
+summary(backwardmod$model)
+```
+
+The stepwise and forward selection methods yielded improved models, showcasing an elevated adjusted R-squared value of 0.9243.
+
+<br>
+
+**Best Subsets**
+
+```{r}
+best.subset<-regsubsets(possession_percent~balls_recovered+tackles_won+free_kicks_taken+passing_accuracy_percent+attacks+runs_into_attacking_third+fouls_committed+times_in_possession+distance_covered_km, data=df3, nv=9)
+summary(best.subset)
+
+subset_UCL=summary(best.subset)
+
+rsquare<-c(subset_UCL$rsq)
+cp<-c(subset_UCL$cp)
+AdjustedR<-c(subset_UCL$adjr2)
+RMSE<-c(subset_UCL$rss)
+BIC<-c(subset_UCL$bic)
+
+
+subset_UCL1=ols_step_best_subset(reduced_model, details=TRUE)
+AIC<-c(subset_UCL1$aic)
+
+cbind(rsquare,cp,AdjustedR,RMSE,BIC,AIC)
+```
+
+```{r}
+par(mfrow=c(2,3)) # split the plotting panel into a 2 x 2 grid
+plot(subset_UCL$cp,type = "o",pch=9, xlab="Number of Variables",ylab= "Cp")
+plot(subset_UCL$rss,type = "o",pch=9, xlab="Number of Variables",ylab= "RMSE")
+plot(subset_UCL$bic,type = "o",pch=9, xlab="Number of Variables",ylab= "BIC")
+plot(subset_UCL1$aic,type = "o",pch=9, xlab="Number of Variables",ylab= "AIC")
+plot(subset_UCL$rsq,type = "o",pch=9, xlab="Number of Variables",ylab= "Rˆ2")
+plot(subset_UCL$adjr2,type = "o",pch=9, xlab="Number of Variables",ylab= "Adjusted Rˆ2")
+```
+
+```{r}
+best_model <- lm(possession_percent~passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken,df3)
+summary(best_model)
+```
+
+According to the All Subsets method, the model with six variables exhibits the lowest values for criteria such as CP, BIC, and AIC, indicating its superior fit among the alternatives. Therefore, our ultimate independent model will incorporate these six variables to optimize its predictive performance.
+
+<br>
+
+**Experimenting with Interaction Terms**
+
+```{r}
+interact_model <- lm(possession_percent~(passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken)^2,df3)
+summary(interact_model)
+```
+
+We removed the insignificant interaction terms and built a new model with interactions subsequently.
+
+<br>
+
+```{r}
+interact_model2 <- lm(possession_percent~passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken+runs_into_attacking_third:tackles_won,df3)
+summary(interact_model2)
+```
+
+Upon exploring interaction effects, it was observed that none of the interactions proved to be statistically significant for predictive purposes. Therefore, interactions were not included in the final model as they did not contribute significantly to the model's explanatory power.
+
+<br>
+
+```{r, echo=FALSE}
+
+UCLdata <-data.frame(df3$possession_percent,df3$passing_accuracy_percent,df3$times_in_possession,df3$fouls_committed,df3$runs_into_attacking_third,df3$tackles_won,df3$free_kicks_taken)
+
+ggpairs(UCLdata,lower = list(continuous = "smooth_loess", combo =
+ "facethist", discrete = "facetbar", na = "na"))
+pairs(~possession_percent+passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken,data=df3,panel = panel.smooth)
+```
+
+<br>
+
+**Experimenting with Higher Order terms**
+
+```{r}
+order_1 <- lm(possession_percent~passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken+I(free_kicks_taken^2)+I(free_kicks_taken^3),df3)
+summary(order_1)
+```
+
+```{r}
+order_2 <- lm(possession_percent~passing_accuracy_percent+times_in_possession+I(times_in_possession^2)+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken,df3)
+summary(order_2)
+```
+
+```{r}
+order_3 <- lm(possession_percent~passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+I(tackles_won^2)+free_kicks_taken,df3)
+summary(order_3)
+```
+
+After conducting several iterations, it became evident that the inclusion of higher-order variables did not enhance the model's performance. In fact, the addition of these variables resulted in a reduction in the adjusted R-squared. Consequently, we concluded that the optimal model for predictive purposes is the initial first-order model, as it provides the most effective representation of the data.
+
+<br>
+
+Hence, the final model is as follows:
+
+$\small\widehat{\text{possession_percent}}_i = -119.376 + 1.478\text{passing_accuracy_percent} + 0.03\text{times_in_possession}+ 0.118\text{fouls_committed} + 0.044\text{runs_into_attacking_third}- 0.115\text{tackles_won} + 0.045\text{free_kicks_taken}$
+
+<br>
+
+**Checking Model Assumptions**
+
+<br>
+
+**Checking for Multicollinearity**
+
+```{r, echo=FALSE}
+
+UCLdata <-data.frame(df3$possession_percent,df3$passing_accuracy_percent,df3$times_in_possession,df3$fouls_committed,df3$runs_into_attacking_third,df3$tackles_won,df3$free_kicks_taken)
+
+ggpairs(UCLdata,lower = list(continuous = "smooth_loess", combo =
+ "facethist", discrete = "facetbar", na = "na"))
+pairs(~possession_percent+passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken,data=df3,panel = panel.smooth)
+```
+
+```{r}
+vif(lm(possession_percent~passing_accuracy_percent+times_in_possession+fouls_committed+runs_into_attacking_third+tackles_won+free_kicks_taken, data = df3))
+```
+
+Upon careful examination through pair-wise scatterplots and variance inflation factor (VIF) analysis, we can confidently affirm the absence of multicollinearity within our final model. There were no instances of high correlation (greater than 0.8) among the predictors, and the VIF values remained consistently low, allaying concerns of collinearity-related issues. This ensures the reliability and stability of our chosen predictors in the model.
+
+<br>
+
+**Checking for Heteroscedasticity or Equal Variance**
+
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:& \text{heteroscedasticity is not present (homoscedasticity)}\\
+{\rm H}_{A} &:& \text{heteroscedasticity is present}
+\end{eqnarray}
+$$
+
+```{r, echo=FALSE}
+plot(best_model, which=1)
+plot(best_model, which=3)
+```
+
+```{r}
+bptest(best_model)
+```
+
+The residual plots exhibited a random scatter pattern, indicating the absence of heteroscedasticity. To further validate this, we conducted the Breusch-Pagan Test, resulting in a p-value of 0.457. As this p-value exceeds the significance level of 0.05, we fail to reject the null hypothesis, affirming the equality of variance assumption in our model. This reassures the robustness of our model against issues related to unequal variances.
+
+<br>
+
+**Normality**
+
+$$
+\begin{eqnarray}
+{\rm H}_{0} &:& \text{the sample data are significantly normally distributed}\\
+{\rm H}_{A} &:& \text{the sample data are not significantly normally distributed}
+\end{eqnarray}
+$$
+
+```{r, echo=FALSE}
+ggplot(df3, aes(sample=best_model$residuals)) + stat_qq() + stat_qq_line() + labs(title="Normal Q-Q plot")
+```
+
+```{r}
+shapiro.test(residuals(best_model))
+```
+
+The Normality assumption was confirmed by examining the Q-Q plot, and Shapiro test, yielding a p-value of 0.5138, indicating adherence to a normal distribution.
+
+<br>
+
+**Linearity**
+
+```{r}
+ggplot(best_model, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0)
+```
+
+The Linearity assumption is met since the residuals exhibit a random scatter pattern around the 0-value axis, indicating no discernible pattern or structure.
+
+<br>
+
+**Outliers**
+
+```{r, echo=FALSE}
+plot(best_model,which=5)
+
+plot(best_model,pch=18,col="red",which=c(4))
+```
+
+Checking for outliers with leverage values greater than 3p/n, we observe no distinct outliers based on Cook's distance and Residual vs Leverage plots.
+
+<br>
+
+```{r}
+lev=hatvalues(best_model)
+p = length(coef(best_model))
+n = nrow(df3)
+outlier3p = lev[lev>(3*p/n)]
+print(outlier3p)
+```
+
+```{r, echo=FALSE}
+plot(rownames(df3),lev, main = "Leverage Plot", xlab="observation",
+    ylab = "Leverage Value")
+abline(h = 3 *p/n, lty = 1)
+```
+
+No influential leverage points or outliers were identified through the leverage plot analysis.
+
+<br>
+
+After thorough analysis, our model meets all the necessary assumptions. Therefore, we conclude that our final model is robust and suitable for predictive purposes.
+
+```{r}
+summary(best_model)
+```
+
+Now that all the assumptions have been fulfilled we can show our final model which has Adj R2 of 0.84 and low RSE of 11.91. The final model we will be using for predictions is as follows:
+
+\
+
+$\small\widehat{\text{possession_percent}}_i = -119.376 + 1.478\text{passing_accuracy_percent} + 0.03\text{times_in_possession}+ 0.118\text{fouls_committed} + 0.044\text{runs_into_attacking_third}- 0.115\text{tackles_won} + 0.045\text{free_kicks_taken}$
+
+<br>
+
+In the following section, predictions were generated for the teams Manchester City FC and Villarreal FC, whose data was initially set aside for testing purposes.
+
+<br>
+
+### **Model Predictions**
+
+<br>
+
+#### **Predicting for Manchester City**
+
+```{r, echo=FALSE, results=FALSE}
+row_index <- which(ucl$team_name == "Manchester City FC")
+
+selected_row <- ucl[row_index, c("win_pct", "goals", "goals_conceded", "free_kicks_taken", "possession_percent", "passing_accuracy_percent", "times_in_possession", "fouls_committed", "runs_into_attacking_third", "tackles_won", "balls_recovered")]
+selected_row
+```
+
+```{r}
+MCity = data.frame(goals=18, goals_conceded=10, free_kicks_taken=73, passing_accuracy_percent=90.17, times_in_possession=952, fouls_committed=57, runs_into_attacking_third=101, tackles_won=18, balls_recovered=230)
+```
+
+**Predicting the Win % for Manchester City FC (Actual Win % = 66.667)**
+
+```{r}
+predict(updated_model,MCity,interval="predict")
+```
+
+**Predicting the Possession % for Manchester City FC (Actual possession % = 57.67)**
+
+```{r}
+predict(best_model,MCity,interval="predict")
+```
+
+The results indicate a close match between the predictions generated by both models for Manchester City FC. The predicted Win Percentage was 72.32, compared to the actual value of 66.67, while the predicted Possession Percentage was 55.89, closely aligning with the actual value of 57.67.
+
+<br>
+
+#### **Predicting for Villarreal CF**
+
+```{r, echo=FALSE, results=FALSE}
+row_index <- which(ucl$team_name == "Villarreal CF")
+
+selected_row <- ucl[row_index, c("win_pct", "goals", "goals_conceded", "free_kicks_taken", "possession_percent", "passing_accuracy_percent", "times_in_possession", "fouls_committed", "runs_into_attacking_third", "tackles_won")]
+selected_row
+```
+
+```{r}
+Villarreal_CF = data.frame(goals=12, goals_conceded=9, free_kicks_taken=83, passing_accuracy_percent=83.34, times_in_possession=1040, fouls_committed=54, runs_into_attacking_third=61, tackles_won=25)
+```
+
+**Predicting the Win % for Villarreal CF (Actual Win % = 50)**
+
+```{r}
+predict(updated_model,Villarreal_CF,interval="predict")
+```
+
+**Predicting the Possession % for Villarreal (Actual possession % = 50)**
+
+```{r}
+predict(best_model,Villarreal_CF,interval="predict")
+```
+
+The results indicate a close match between the predictions generated by both models for Villarreal CF. The predicted Win Percentage was 50.24, closely aligning with the actual value of 50. The predicted Possession Percentage was 46.06, also in close proximity to the actual value of 50.
+
+<br><br>
+
+### **References**
+
+-   Olalekan, G. (n.d.). UEFA Champions League 2021/22 [Data set]. Kaggle. <https://www.kaggle.com/datasets/ganiyuolalekan/uefa-champions-league-202122/data>
+
+-   Farias, Vinícius & Fernandes, Wesley & Bergmann, Gabriel & Pinheiro, Eraldo. (2021). Relationship between ball possession and match outcome in UEFA Champions League. Motricidade. 16. 1-7. 10.6063/motricidade.18382.
+
+-   UEFA Champions League Competition Format & History \| Premier League. (2023). Retrieved from https://www.premierleague.com/uefa-champions-league-explaineds  
+
+<br><br>
+
+### **Appendix: All code for this report**
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
